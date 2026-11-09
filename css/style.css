@@ -25,7 +25,8 @@
   --faint: rgba(255, 255, 255, 0.26);
   --border: rgba(255, 255, 255, 0.085);
   --border-strong: rgba(255, 255, 255, 0.14);
-  --line: rgba(255, 255, 255, 0.045);
+  --line: rgba(255, 255, 255, 0.055);
+  --tick: rgba(255, 255, 255, 0.24);
   --sat-bg: rgba(82, 156, 202, 0.07);
   --sun-bg: rgba(235, 87, 87, 0.075);
   --today-bg: rgba(35, 131, 226, 0.09);
@@ -54,7 +55,8 @@
   --faint: rgba(55, 53, 47, 0.35);
   --border: rgba(55, 53, 47, 0.1);
   --border-strong: rgba(55, 53, 47, 0.17);
-  --line: rgba(55, 53, 47, 0.055);
+  --line: rgba(55, 53, 47, 0.065);
+  --tick: rgba(55, 53, 47, 0.28);
   --sat-bg: rgba(35, 131, 226, 0.05);
   --sun-bg: rgba(235, 87, 87, 0.06);
   --today-bg: rgba(35, 131, 226, 0.07);
@@ -200,8 +202,13 @@ button.mc-wk:hover { color: var(--text); }
   font-size: 10px; color: var(--faint);
 }
 .tl-dayheads { display: flex; }
-.tl-dayhead { flex: 0 0 auto; border-left: 1px solid var(--border); position: relative; min-width: 0; }
-.tl-dayhead:first-child { border-left: 0; }
+.tl-dayhead { flex: 0 0 auto; position: relative; min-width: 0; }
+/* 日の境目の線（中身の位置をずらさないよう疑似要素で描く） */
+.tl-dayhead::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; z-index: 1;
+  border-left: 1px solid var(--border); pointer-events: none;
+}
+.tl-dayhead:first-child::before { display: none; }
 .tl-dayhead.sat { background: var(--sat-bg); }
 .tl-dayhead.sun { background: var(--sun-bg); }
 .dh-date {
@@ -214,25 +221,25 @@ button.mc-wk:hover { color: var(--text); }
 .tl-dayhead.sat .dh-num, .tl-dayhead.sat .dh-wd { color: var(--sat-text); }
 .tl-dayhead.sun .dh-num, .tl-dayhead.sun .dh-wd { color: var(--sun-text); }
 .tl-dayhead.today .dh-num { background: var(--red); color: #fff; border-radius: 9px; padding: 0 6px; }
-.dh-hours { position: relative; height: 17px; border-top: 1px solid var(--border); overflow: hidden; }
-.dh-hour {
-  position: absolute; top: 0; height: 17px; padding-left: 3px;
-  font-size: 10px; line-height: 16px; color: var(--muted);
-  border-left: 1px solid var(--line); font-variant-numeric: tabular-nums;
+/* 時刻の目盛り：毎時の短い線（下側）と数字（上側） */
+.dh-hours { position: relative; display: flex; height: 19px; border-top: 1px solid var(--border); overflow: hidden; }
+.dh-h { position: relative; flex: 0 0 var(--hw); height: 100%; }
+.dh-h::before { content: ""; position: absolute; left: 0; bottom: 0; height: 5px; border-left: 1px solid var(--tick); }
+.dh-h:first-child::before { display: none; }
+.dh-lbl {
+  position: absolute; top: 1px; transform: translateX(-50%); pointer-events: none;
+  font-size: 10px; line-height: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
 }
-.dh-hour:first-child { border-left: 0; }
+.dh-lbl.first { left: 3px; transform: none; }
+.dh-lbl.last { right: 3px; transform: none; }
 
 .tl-body { position: relative; flex: 1 0 auto; }
 .tl-grid { position: absolute; top: 0; bottom: 0; z-index: 0; pointer-events: none; }
-.tl-col {
-  position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border);
-  background-image: repeating-linear-gradient(
-    to right,
-    transparent 0, transparent calc(var(--hw) - 1px),
-    var(--line) calc(var(--hw) - 1px), var(--line) var(--hw)
-  );
-}
-.tl-col:first-child { border-left: 0; }
+/* 1日＝1時間ごとのセルの並び。各セルの左の線が毎時の縦線 */
+.tl-col { position: absolute; top: 0; bottom: 0; display: flex; }
+.tl-h { flex: 0 0 var(--hw); height: 100%; border-left: 1px solid var(--line); }
+.tl-col .tl-h:first-child { border-left-color: var(--border); }
+.tl-col:first-child .tl-h:first-child { border-left-color: transparent; }
 .tl-col.sat { background-color: var(--sat-bg); }
 .tl-col.sun { background-color: var(--sun-bg); }
 .tl-col.today { background-color: var(--today-bg); }

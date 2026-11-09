@@ -6,7 +6,7 @@ const LS_KEY = 'tlcal.v1';
 
 export const DEFAULTS = {
   theme: 'auto',
-  startHour: 7,
+  startHour: 8,
   endHour: 20,
   weekStart: 0,
   view: 'week',
@@ -80,7 +80,7 @@ export function embedUrl(s) {
   p.set('api', s.api);
   p.set('key', s.key);
   if (s.theme && s.theme !== 'auto') p.set('theme', s.theme);
-  p.set('hours', `${s.startHour}-${s.endHour}`);
+  if (s.startHour !== DEFAULTS.startHour || s.endHour !== DEFAULTS.endHour) p.set('hours', `${s.startHour}-${s.endHour}`);
   if (s.weekStart) p.set('ws', '1');
   return `${location.origin}${location.pathname}#${p.toString()}`;
 }

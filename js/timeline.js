@@ -26,14 +26,19 @@ export function createTimeline(scroller, cb) {
 
   function geometry() {
     const width = scroller.clientWidth || 900;
-    const labelW = width < 560 ? 96 : 148;
+    const baseLabel = width < 560 ? 96 : 148;
     const hourSpan = m.endHour - m.startHour;
-    const avail = Math.max(240, width - labelW - 1);
-    const minDay = m.days === 1 ? 0 : 56;
-    const dayW = Math.max(Math.floor(avail / m.days), Math.ceil(hourSpan * (ZOOM_PX[m.zoom] || 0)), minDay);
-    const pxH = dayW / hourSpan;
+    const avail = Math.max(240, width - baseLabel - 1);
+    // 1時間の幅は整数pxにする（小数だと縦線がにじんで間隔が不揃いに見えるため）
+    const fit = Math.floor(avail / (m.days * hourSpan));
+    const minPx = m.days === 1 ? 1 : Math.ceil(56 / hourSpan);
+    const pxH = Math.max(fit, ZOOM_PX[m.zoom] || 0, minPx);
+    const dayW = pxH * hourSpan;
+    const trackW = dayW * m.days;
+    // 割り切れずに余った幅は左の名前欄に回す
+    const labelW = Math.min(Math.max(baseLabel, width - trackW - 1), baseLabel + 140);
     const snapMin = pxH >= 44 ? 15 : pxH >= 16 ? 30 : 60;
-    return { labelW, hourSpan, dayW, pxH, snapMin, trackW: dayW * m.days };
+    return { labelW, hourSpan, dayW, pxH, snapMin, trackW };
   }
 
   /** 日時 → 横位置。表示時間の外は日の端に寄せる */
@@ -96,34 +101,51 @@ export function createTimeline(scroller, cb) {
     scroller.scrollTop = st;
   }
 
+  function dayClass(base, d, today) {
+    const dow = d.getDay();
+    const red = m.holidays.has(ymd(d)) || dow === 0;
+    return [base, red ? 'sun' : dow === 6 ? 'sat' : '', sameDay(d, today) ? 'today' : ''].filter(Boolean).join(' ');
+  }
+
+  /** 数字を何時間おきに出すか（詰まらない最小の間隔。終わりの時刻にも数字が付く間隔を優先） */
+  function labelStep() {
+    const fits = [1, 2, 3, 4, 6, 12, 24].filter((s) => s * g.pxH >= 24);
+    return fits.find((s) => g.hourSpan % s === 0) || fits[0] || g.hourSpan;
+  }
+
+  /** 1日分の目盛り：毎時の短い線と数字（最初は左寄せ、最後は右寄せ、間は線の真上） */
+  function hourScale() {
+    const step = labelStep();
+    const cells = [];
+    for (let k = 0; k < g.hourSpan; k++) cells.push(h('i', { class: 'dh-h' }));
+    const labels = [];
+    for (let hr = m.startHour; hr <= m.endHour; hr += step) {
+      let cls = 'dh-lbl';
+      if (hr === m.startHour) cls += ' first';
+      else if (hr === m.endHour) cls += ' last';
+      const style = hr === m.startHour || hr === m.endHour ? null : { left: `${(hr - m.startHour) * g.pxH}px` };
+      labels.push(h('span', { class: cls, style }, String(hr)));
+    }
+    return h('div', { class: 'dh-hours' }, cells, labels);
+  }
+
   function renderHead() {
     const today = new Date();
-    const step = g.pxH >= 26 ? 1 : g.pxH >= 13 ? 2 : g.pxH >= 7 ? 3 : 6;
     const cells = [];
     for (let i = 0; i < m.days; i++) {
       const d = addDays(m.start, i);
       const hol = m.holidays.get(ymd(d));
-      const dow = d.getDay();
-      const cls = ['tl-dayhead', hol || dow === 0 ? 'sun' : dow === 6 ? 'sat' : '', sameDay(d, today) ? 'today' : '']
-        .filter(Boolean)
-        .join(' ');
       const label = m.days === 1 ? `${d.getMonth() + 1}月${d.getDate()}日` : `${d.getMonth() + 1}/${d.getDate()}`;
-      const ticks = [];
-      for (let hr = m.startHour; hr < m.endHour; hr += step) {
-        const x = (hr - m.startHour) * g.pxH;
-        if (x + 15 > g.dayW) break; // 日の右端で数字が欠けるものは出さない
-        ticks.push(h('span', { class: 'dh-hour', style: { left: `${x}px` } }, String(hr)));
-      }
       cells.push(
-        h('div', { class: cls, style: { width: `${g.dayW}px` }, title: hol || null },
+        h('div', { class: dayClass('tl-dayhead', d, today), style: { width: `${g.dayW}px` }, title: hol || null },
           h('div', { class: 'dh-date' },
             h('span', { class: 'dh-num' }, label),
             h('span', { class: 'dh-wd' }, `(${wd(d)})`),
             hol && g.dayW >= 120 ? h('span', { class: 'dh-hol' }, hol) : null),
-          h('div', { class: 'dh-hours' }, ticks)),
+          hourScale()),
       );
     }
-    return h('div', { class: 'tl-head' },
+    return h('div', { class: 'tl-head', style: { '--hw': `${g.pxH}px` } },
       h('div', { class: 'tl-corner', style: { width: `${g.labelW}px` } }, `${m.startHour}時〜${m.endHour}時`),
       h('div', { class: 'tl-dayheads' }, cells));
   }
@@ -143,11 +165,10 @@ export function createTimeline(scroller, cb) {
     const grid = h('div', { class: 'tl-grid', style: { left: `${g.labelW}px`, width: `${g.trackW}px`, '--hw': `${g.pxH}px` } });
     for (let i = 0; i < m.days; i++) {
       const d = addDays(m.start, i);
-      const dow = d.getDay();
-      const cls = ['tl-col', m.holidays.has(ymd(d)) || dow === 0 ? 'sun' : dow === 6 ? 'sat' : '', sameDay(d, today) ? 'today' : '']
-        .filter(Boolean)
-        .join(' ');
-      grid.append(h('div', { class: cls, style: { left: `${i * g.dayW}px`, width: `${g.dayW}px` } }));
+      // 1時間ごとに1本ずつ縦線（各セルの左の線）
+      const col = h('div', { class: dayClass('tl-col', d, today), style: { left: `${i * g.dayW}px`, width: `${g.dayW}px` } });
+      for (let k = 0; k < g.hourSpan; k++) col.append(h('i', { class: 'tl-h' }));
+      grid.append(col);
     }
     const now = new Date();
     const di = dayDiff(m.start, now);
